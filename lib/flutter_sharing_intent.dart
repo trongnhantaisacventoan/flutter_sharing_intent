@@ -51,7 +51,6 @@ class FlutterSharingIntent {
       _streamMedia = stream.transform<List<SharedFile>>(
         StreamTransformer<String?, List<SharedFile>>.fromHandlers(
           handleData: (String? data, EventSink<List<SharedFile>> sink) {
-            print("DKM ------- getMediaStream ${data}");
             if (data == null) {
               sink.add([]);
             } else {
