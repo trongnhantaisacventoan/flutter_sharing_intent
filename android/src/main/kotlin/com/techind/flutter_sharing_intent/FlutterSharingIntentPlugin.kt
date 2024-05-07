@@ -10,13 +10,15 @@ import android.provider.MediaStore
 import android.util.Log
 import android.webkit.URLUtil
 import androidx.annotation.NonNull
-
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
-import io.flutter.plugin.common.*
+import io.flutter.plugin.common.BinaryMessenger
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
-import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.PluginRegistry
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -32,17 +34,17 @@ private const val EVENTS_CHANNEL_MEDIA = "flutter_sharing_intent/events-sharing"
  **  Purpose -  Created [FlutterSharingIntentPlugin] class to manage sharing intent
  */
 
-class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandler,
+class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandler,
   EventChannel.StreamHandler,
   PluginRegistry.NewIntentListener {
-  private var TAG:String = javaClass.name
+  private var TAG: String = javaClass.name
 
   /** To store initial & latest value when app is opened from background **/
   private var initialSharing: JSONArray? = null
   private var latestSharing: JSONArray? = null
 
   /// The MethodChannel that will the communication between Flutter and native Android
-  private lateinit var channel : MethodChannel
+  private lateinit var channel: MethodChannel
   private lateinit var eventChannel: EventChannel
 
   private var eventSinkSharing: EventChannel.EventSink? = null
@@ -68,16 +70,18 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     when (call.method) {
       "getInitialSharing" -> {
-         result.success(initialSharing?.toString())
-          /// Clear cache data to send only once
-          initialSharing = null
-          latestSharing = null
+        result.success(initialSharing?.toString())
+        /// Clear cache data to send only once
+        initialSharing = null
+        latestSharing = null
       }
+
       "reset" -> {
         initialSharing = null
         latestSharing = null
         result.success(null)
       }
+
       else -> result.notImplemented()
     }
   }
@@ -90,9 +94,9 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
   }
 
   private fun handleIntent(intent: Intent, initial: Boolean) {
-    Log.w(TAG,"handleIntent ==>> ${intent.action}, ${intent.type}")
+    Log.w(TAG, "handleIntent ==>> ${intent.action}, ${intent.type}")
     when {
-      (intent.type?.startsWith("text") != true)
+      (intent.type != null && intent.type?.startsWith("text") != true)
               && (intent.action == Intent.ACTION_SEND
               || intent.action == Intent.ACTION_SEND_MULTIPLE) -> { // Sharing images or videos
 
@@ -100,19 +104,21 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
         val value = getSharingUris(intent)
         if (initial) initialSharing = value
         latestSharing = value
-        Log.w(TAG,"handleIntent ==>> $value")
-        eventSinkSharing?.success(value?.toString())
+        Log.w(TAG, "handleIntent ==>> $value")
+        eventSinkSharing?.success(latestSharing?.toString())
       }
-      (intent.type == null || intent.type?.startsWith("text") == true)
-              && (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_SEND_MULTIPLE) -> { // Sharing text
 
-        val value = getSharingText(intent) ?: getSharingUris(intent)
+      (intent.type == null || intent.type?.startsWith("text") == true)
+              && intent.action == Intent.ACTION_SEND -> { // Sharing text
+
+        val value = getSharingText(intent)
         if (initial) initialSharing = value
         latestSharing = value
-        Log.w(TAG,"handleIntent ==>> $value")
-        eventSinkSharing?.success(value?.toString())
+        Log.w(TAG, "handleIntent ==>> $value")
+        eventSinkSharing?.success(latestSharing?.toString())
 
       }
+
       intent.action == Intent.ACTION_VIEW -> { // Opening URL
         val value = JSONArray().put(
           JSONObject()
@@ -121,8 +127,8 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
         )
         if (initial) initialSharing = value
         latestSharing = value
-        Log.w(TAG,"handleIntent ==>> $value")
-        eventSinkSharing?.success(value?.toString())
+        Log.w(TAG, "handleIntent ==>> $value")
+        eventSinkSharing?.success(latestSharing?.toString())
       }
     }
   }
@@ -133,7 +139,7 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
     return when (intent.action) {
       Intent.ACTION_SEND -> {
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-        val path = uri?.let{ MyFileDirectory.getAbsolutePath(applicationContext, it) }
+        val path = uri?.let { MyFileDirectory.getAbsolutePath(applicationContext, it) }
         if (path != null) {
           val type = getMediaType(path)
           val thumbnail = getThumbnail(path, type)
@@ -148,27 +154,32 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
           )
         } else null
       }
+
       Intent.ACTION_SEND_MULTIPLE -> {
         val uris = intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+        println("URIS: ${uris?.isEmpty()}")
         val value = uris?.mapNotNull { uri ->
           val path = MyFileDirectory.getAbsolutePath(applicationContext, uri)
-            ?: return@mapNotNull null
-          val type = getMediaType(path)
-          val thumbnail = getThumbnail(path, type)
-          val duration = getDuration(path, type)
-          return@mapNotNull JSONObject()
-            .put("value", path)
-            .put("type", type.ordinal)
-            .put("thumbnail", thumbnail)
-            .put("duration", duration)
+
+          if (path != null) {
+            val type = getMediaType(path)
+            val thumbnail = getThumbnail(path, type)
+            val duration = getDuration(path, type)
+            return@mapNotNull JSONObject()
+              .put("value", path)
+              .put("type", type.ordinal)
+              .put("thumbnail", thumbnail)
+              .put("duration", duration)
+          } else null
         }?.toList()
         if (value != null) JSONArray(value) else null
       }
+
       else -> null
     }
   }
 
- private fun getSharingText(intent: Intent?): JSONArray? {
+  private fun getSharingText(intent: Intent?): JSONArray? {
     if (intent == null) return null
 
     return when (intent.action) {
@@ -183,6 +194,7 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
           )
         } else null
       }
+
       Intent.ACTION_SEND_MULTIPLE -> {
         val textList = intent.getStringArrayListExtra(Intent.EXTRA_TEXT)
 
@@ -197,14 +209,14 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
         }?.toList()
         if (value != null) JSONArray(value) else null
       }
+
       else -> null
     }
   }
 
   // To get type for text and url only
   // It will return MediaType.URL.ordinal if text is valid url other will return MediaType.TEXT.ordinal
-  fun getTypeForTextAndUrl( value: String?) : Int
-  {
+  fun getTypeForTextAndUrl(value: String?): Int {
     return if (value == null || !URLUtil.isValidUrl(value)) MediaType.TEXT.ordinal else MediaType.URL.ordinal;
   }
 
@@ -224,8 +236,9 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
 
     val videoFile = File(path)
     val targetFile = File(applicationContext.cacheDir, "${videoFile.name}.png")
-    val bitmap = ThumbnailUtils.createVideoThumbnail(path, MediaStore.Video.Thumbnails.MINI_KIND)
-      ?: return null
+    val bitmap =
+      ThumbnailUtils.createVideoThumbnail(path, MediaStore.Video.Thumbnails.MINI_KIND)
+        ?: return null
     FileOutputStream(targetFile).use { out ->
       bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
     }
@@ -237,13 +250,14 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
     if (type != MediaType.VIDEO) return null // get duration for video only
     val retriever = MediaMetadataRetriever()
     retriever.setDataSource(path)
-    val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+    val duration =
+      retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
     retriever.release()
     return duration
   }
 
   enum class MediaType {
-    TEXT, URL, IMAGE, VIDEO, FILE ;
+    TEXT, URL, IMAGE, VIDEO, FILE;
   }
 
   override fun onNewIntent(intent: Intent): Boolean {
@@ -281,6 +295,5 @@ class FlutterSharingIntentPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
       "sharing" -> eventSinkSharing = null
     }
   }
-
 
 }
