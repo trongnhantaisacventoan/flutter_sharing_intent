@@ -95,14 +95,16 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
   }
 
   private fun handleIntent(intent: Intent, initial: Boolean) {
-    Log.w(TAG, "handleIntent ==>> ${intent.action}, ${intent.type}")
+    val intentFlags = intent.getFlags()
+    if ((intentFlags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) {
+      Log.w(TAG, "handleIntent ==>> ${intent.action}, ${intent.type}")
     when {
       (intent.type != null && intent.type?.startsWith("text") != true)
               && (intent.action == Intent.ACTION_SEND
               || intent.action == Intent.ACTION_SEND_MULTIPLE) -> { // Sharing images or videos
 
 
-        val value = getSharingUris(intent)
+        val value = getSharingUris(intent) ?: getSharingUris(intent)
         if (initial) initialSharing = value
         latestSharing = value
         Log.w(TAG, "handleIntent ==>> $value")
@@ -132,6 +134,8 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
         eventSinkSharing?.success(latestSharing?.toString())
       }
     }
+    }
+    
   }
 
   private fun getSharingUris(intent: Intent?): JSONArray? {
