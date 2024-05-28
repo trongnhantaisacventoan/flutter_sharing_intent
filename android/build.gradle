@@ -25,7 +25,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 
 android {
-    namespace 'com.techind.flutter_sharing_intent'
+//    namespace 'com.techind.flutter_sharing_intent'
     compileSdkVersion 33
 
     compileOptions {

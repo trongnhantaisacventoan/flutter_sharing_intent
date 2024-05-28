@@ -104,7 +104,7 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
               || intent.action == Intent.ACTION_SEND_MULTIPLE) -> { // Sharing images or videos
 
 
-        val value = getSharingUris(intent) ?: getSharingUris(intent)
+        val value = getSharingUris(intent)
         if (initial) initialSharing = value
         latestSharing = value
         Log.w(TAG, "handleIntent ==>> $value")
@@ -112,9 +112,10 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
       }
 
       (intent.type == null || intent.type?.startsWith("text") == true)
-              && intent.action == Intent.ACTION_SEND -> { // Sharing text
+              && (intent.action == Intent.ACTION_SEND
+              || intent.action == Intent.ACTION_SEND_MULTIPLE) -> { // Sharing text
 
-        val value = getSharingText(intent)
+        val value = getSharingText(intent) ?: getSharingUris(intent)
         if (initial) initialSharing = value
         latestSharing = value
         Log.w(TAG, "handleIntent ==>> $value")
