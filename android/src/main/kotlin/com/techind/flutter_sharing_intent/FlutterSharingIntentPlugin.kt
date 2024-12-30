@@ -7,6 +7,7 @@ import android.media.MediaMetadataRetriever
 import android.media.ThumbnailUtils
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.util.Log
 import android.webkit.URLUtil
 import androidx.annotation.NonNull
@@ -145,6 +146,10 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
       Intent.ACTION_SEND -> {
         val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
         val path = uri?.let { MyFileDirectory.getAbsolutePath(applicationContext, it) }
+
+        val size = getSize(uri)
+        val name = getName(uri)
+
         if (path != null) {
           val type = getMediaType(path)
           val thumbnail = getThumbnail(path, type)
@@ -152,10 +157,12 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
 
           JSONArray().put(
             JSONObject()
+              .put("name", name)
               .put("value", path)
               .put("type", type.ordinal)
               .put("thumbnail", thumbnail)
               .put("duration", duration)
+              .put("size", size)
           )
         } else null
       }
@@ -165,16 +172,19 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
         println("URIS: ${uris?.isEmpty()}")
         val value = uris?.mapNotNull { uri ->
           val path = MyFileDirectory.getAbsolutePath(applicationContext, uri)
-
+          val size = getSize(uri)
+          val name = getName(uri)
           if (path != null) {
             val type = getMediaType(path)
             val thumbnail = getThumbnail(path, type)
             val duration = getDuration(path, type)
             return@mapNotNull JSONObject()
+              .put("name", name)
               .put("value", path)
               .put("type", type.ordinal)
               .put("thumbnail", thumbnail)
               .put("duration", duration)
+              .put("size", size)
           } else null
         }?.toList()
         if (value != null) JSONArray(value) else null
@@ -259,6 +269,42 @@ class FlutterSharingIntentPlugin : FlutterPlugin, ActivityAware, MethodCallHandl
       retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
     retriever.release()
     return duration
+  }
+
+  private fun getName(uri: Uri?): String? {
+    var fileName: String? = null
+    val cursor = applicationContext.contentResolver
+      .query(uri!!, null, null, null, null, null)
+    try {
+      if (cursor != null && cursor.moveToFirst()) {
+        // get file name
+        val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (!cursor.isNull(nameIndex)) {
+          fileName = cursor.getString(nameIndex)
+        }
+      }
+    } finally {
+      cursor!!.close()
+    }
+    return fileName
+  }
+
+  private fun getSize(uri: Uri?): String? {
+    var fileSize: String? = null
+    val cursor = applicationContext.contentResolver
+      .query(uri!!, null, null, null, null, null)
+    try {
+      if (cursor != null && cursor.moveToFirst()) {
+        // get file size
+        val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+        if (!cursor.isNull(sizeIndex)) {
+          fileSize = cursor.getString(sizeIndex)
+        }
+      }
+    } finally {
+      cursor!!.close()
+    }
+    return fileSize
   }
 
   enum class MediaType {
