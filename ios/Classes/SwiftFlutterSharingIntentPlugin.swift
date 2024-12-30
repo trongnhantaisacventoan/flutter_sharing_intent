@@ -125,7 +125,7 @@ public class SwiftFlutterSharingIntentPlugin: NSObject, FlutterStreamHandler, Fl
             let userDefaults = UserDefaults(suiteName: appGroupId)
 
 
-            if url.fragment == "media" {
+            if url.fragment == "media" || url.fragment == "file" {
                 if let key = url.host?.components(separatedBy: "=").last,
                    let json = userDefaults?.object(forKey: key) as? Data {
                     let sharedArray = decode(data: json)
@@ -142,24 +142,6 @@ public class SwiftFlutterSharingIntentPlugin: NSObject, FlutterStreamHandler, Fl
                         }
                         
                         return SharingFile.init(value: value, thumbnail: nil, duration: $0.duration, type: $0.type)
-                    }
-                    latestSharing = sharedMediaFiles
-                    if(setInitialData) {
-                        initialSharing = latestSharing
-                    }
-                    eventSinkMedia?(toJson(data: latestSharing))
-                }
-            } else if url.fragment == "file" {
-                if let key = url.host?.components(separatedBy: "=").last,
-                   let json = userDefaults?.object(forKey: key) as? Data {
-                    let sharedArray = decode(data: json)
-                    let sharedMediaFiles: [SharingFile] = sharedArray.compactMap{
-                        guard getAbsolutePath(for: $0.value) != nil else {
-                            return nil
-                        }
-                        return SharingFile.init(value: $0.value,
-                                                thumbnail: nil, duration: nil,
-                                                type: $0.type)
                     }
                     latestSharing = sharedMediaFiles
                     if(setInitialData) {
@@ -250,7 +232,8 @@ public class SwiftFlutterSharingIntentPlugin: NSObject, FlutterStreamHandler, Fl
             let encodedData = try JSONDecoder().decode([SharingFile].self, from: data)
             return encodedData
         } catch {
-            fatalError(error.localizedDescription)
+            print("Decoding error:", error.localizedDescription)
+            return []
         }
 
     }
